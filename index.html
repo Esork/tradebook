@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeBook — PDT Guard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface2: #181c22;
+    --border: #1f2530;
+    --border2: #2a3140;
+    --text: #d4dae6;
+    --muted: #5a6478;
+    --accent: #f0b429;
+    --accent2: #e07c00;
+    --green: #26d97f;
+    --red: #f2415a;
+    --blue: #4a9eff;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+  .logo span { color: var(--muted); }
+
+  /* PDT Status Badge */
+  #pdt-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: 1px solid;
+    transition: all 0.3s;
+  }
+  #pdt-badge.safe   { color: var(--green); border-color: #26d97f44; background: #26d97f0d; }
+  #pdt-badge.warn   { color: var(--accent); border-color: #f0b42944; background: #f0b4290d; }
+  #pdt-badge.danger { color: var(--red); border-color: #f2415a44; background: #f2415a0d; animation: pulse 1.5s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 #f2415a22; }
+    50% { box-shadow: 0 0 0 6px #f2415a00; }
+  }
+
+  .badge-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 61px);
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    max-height: calc(100vh - 61px);
+    position: sticky;
+    top: 61px;
+  }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  /* Stats row */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .stat-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+  }
+
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .stat-val {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .stat-val.pos { color: var(--green); }
+  .stat-val.neg { color: var(--red); }
+  .stat-val.neutral { color: var(--text); }
+
+  /* PDT Rolling Window */
+  .pdt-window {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+
+  .pdt-bar-track {
+    background: var(--border);
+    border-radius: 3px;
+    height: 6px;
+    margin: 10px 0 8px;
+    overflow: hidden;
+  }
+
+  .pdt-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease, background 0.4s ease;
+  }
+
+  .pdt-days-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    gap: 4px;
+  }
+
+  .day-pip {
+    flex: 1;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 5px 2px;
+    border-radius: 3px;
+    background: var(--border);
+    color: var(--muted);
+    border: 1px solid transparent;
+  }
+
+  .day-pip.has-trade { background: #f0b42922; color: var(--accent); border-color: #f0b42944; }
+  .day-pip.today { border-color: var(--accent2); }
+
+  /* ── FORM ── */
+  .form-panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-family: var(--mono);
+  }
+
+  input, select, textarea {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: var(--sans);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  textarea { resize: vertical; min-height: 70px; }
+
+  select option { background: var(--surface2); }
+
+  .outcome-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .outcome-btn {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .outcome-btn:hover { border-color: var(--border2); color: var(--text); }
+  .outcome-btn.active-win   { background: #26d97f18; border-color: var(--green); color: var(--green); }
+  .outcome-btn.active-loss  { background: #f2415a18; border-color: var(--red); color: var(--red); }
+  .outcome-btn.active-be    { background: #4a9eff18; border-color: var(--blue); color: var(--blue); }
+
+  .submit-btn {
+    width: 100%;
+    padding: 11px;
+    border-radius: 5px;
+    border: none;
+    background: var(--accent);
+    color: #0a0c0f;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+  }
+  .submit-btn:hover { background: var(--accent2); }
+  .submit-btn:disabled { background: var(--border2); color: var(--muted); cursor: not-allowed; }
+
+  /* ── MAIN CONTENT ── */
+  .main {
+    padding: 28px 32px;
+    overflow-y: auto;
+  }
+
+  .main-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .main-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .filter-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #f0b4290d;
+  }
+
+  /* ── TRADE TABLE ── */
+  .trade-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+    cursor: pointer;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  td {
+    padding: 12px 16px;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  td.mono { font-family: var(--mono); font-size: 12px; }
+
+  .ticker-tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    background: #f0b4290d;
+    border: 1px solid #f0b42933;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  .outcome-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .outcome-tag.WIN  { background: #26d97f18; color: var(--green); border: 1px solid #26d97f44; }
+  .outcome-tag.LOSS { background: #f2415a18; color: var(--red); border: 1px solid #f2415a44; }
+  .outcome-tag.BE   { background: #4a9eff18; color: var(--blue); border: 1px solid #4a9eff44; }
+  .outcome-tag.OPEN { background: #f0b42918; color: var(--accent); border: 1px solid #f0b42944; }
+
+  .daytrade-flag {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: #f0b4290d;
+    border: 1px solid #f0b42944;
+    color: var(--accent);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .pnl-cell { font-family: var(--mono); font-weight: 700; }
+  .pnl-cell.pos { color: var(--green); }
+  .pnl-cell.neg { color: var(--red); }
+
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+  .action-btn:hover { color: var(--red); border-color: var(--red); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 28px;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .modal-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .modal-detail-row:last-of-type { border-bottom: none; }
+  .modal-detail-key { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .modal-detail-val { color: var(--text); max-width: 280px; text-align: right; word-break: break-word; }
+
+  .modal-close {
+    width: 100%;
+    padding: 10px;
+    margin-top: 16px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+  .modal-close:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── PDT ALERT BANNER ── */
+  #pdt-alert {
+    display: none;
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    border-radius: 6px;
+    border-left: 4px solid;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  #pdt-alert.warn   { background: #f0b42910; border-color: var(--accent); color: var(--accent); }
+  #pdt-alert.danger { background: #f2415a10; border-color: var(--red); color: var(--red); }
+
+  .clear-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid #f2415a44;
+    background: transparent;
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .clear-btn:hover { background: #f2415a18; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { position: static; max-height: none; }
+    .main { padding: 20px; }
+    header { padding: 14px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TRADE<span>BOOK</span> <span style="font-size:10px;margin-left:8px;">// PDT GUARD</span></div>
+  <div id="pdt-badge" class="safe">
+    <div class="badge-dot"></div>
+    <span id="pdt-badge-text">PDT SAFE — 0/3 DAY TRADES</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <!-- Stats -->
+    <div>
+      <div class="section-title">// Account Overview</div>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">Total Trades</div>
+          <div class="stat-val neutral" id="stat-total">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Win Rate</div>
+          <div class="stat-val neutral" id="stat-wr">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Total P&L</div>
+          <div class="stat-val neutral" id="stat-pnl">$0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Avg R:R</div>
+          <div class="stat-val neutral" id="stat-rr">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDT Rolling Window -->
+    <div>
+      <div class="section-title">// Rolling 5-Day PDT Window</div>
+      <div class="pdt-window">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-family:var(--mono);font-size:12px;" id="pdt-count-text">0 day trades</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--muted);">limit: 3</span>
+        </div>
+        <div class="pdt-bar-track">
+          <div class="pdt-bar-fill" id="pdt-bar" style="width:0%;background:var(--green);"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;" id="pdt-msg">You're within safe limits.</div>
+        <div class="pdt-days-row" id="pdt-days-row"></div>
+      </div>
+    </div>
+
+    <!-- Log Form -->
+    <div>
+      <div class="section-title">// Log Trade</div>
+      <div class="form-panel">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Ticker</label>
+            <input type="text" id="f-ticker" placeholder="e.g. NVDA" style="text-transform:uppercase;">
+          </div>
+          <div class="form-group">
+            <label>Direction</label>
+            <select id="f-dir">
+              <option value="LONG">LONG</option>
+              <option value="SHORT">SHORT</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Entry Date</label>
+            <input type="date" id="f-date">
+          </div>
+          <div class="form-group">
+            <label>Entry Time</label>
+            <input type="time" id="f-time">
+          </div>
+          <div class="form-group">
+            <label>Entry Price ($)</label>
+            <input type="number" id="f-entry" placeholder="0.00" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Exit Price ($)</label>
+            <input type="number" id="f-exit" placeholder="0.00 (opt)" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Size (shares)</label>
+            <input type="number" id="f-size" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>Planned R:R</label>
+            <input type="text" id="f-rr" placeholder="e.g. 1:2.5">
+          </div>
+          <div class="form-group full">
+            <label>Day Trade?</label>
+            <select id="f-daytrade">
+              <option value="yes">Yes — same day open & close</option>
+              <option value="no">No — swing / overnight</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Entry Reason</label>
+            <textarea id="f-reason" placeholder="Why did you enter? Setup, signal, confluence..."></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Outcome</label>
+            <div class="outcome-row">
+              <div class="outcome-btn" data-val="WIN" onclick="selectOutcome(this)">WIN</div>
+              <div class="outcome-btn" data-val="LOSS" onclick="selectOutcome(this)">LOSS</div>
+              <div class="outcome-btn" data-val="BE" onclick="selectOutcome(this)">B/E</div>
+            </div>
+            <input type="hidden" id="f-outcome" value="">
+          </div>
+          <div class="form-group full">
+            <label>Post-Trade Notes</label>
+            <textarea id="f-notes" placeholder="What happened? Mistakes, lessons, emotions..."></textarea>
+          </div>
+        </div>
+        <br>
+        <button class="submit-btn" onclick="logTrade()">+ LOG TRADE</button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+    <div class="main-header">
+      <div class="main-title">// TRADE LOG</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="setFilter('ALL', this)">ALL</button>
+          <button class="filter-btn" onclick="setFilter('DAY', this)">DAY TRADES</button>
+          <button class="filter-btn" onclick="setFilter('WIN', this)">WIN</button>
+          <button class="filter-btn" onclick="setFilter('LOSS', this)">LOSS</button>
+        </div>
+        <button class="clear-btn" onclick="confirmClearAll()">CLEAR ALL</button>
+      </div>
+    </div>
+
+    <!-- PDT Alert Banner -->
+    <div id="pdt-alert"></div>
+
+    <!-- Table -->
+    <div class="trade-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Ticker</th>
+            <th>Dir</th>
+            <th>Entry</th>
+            <th>Exit</th>
+            <th>Size</th>
+            <th>P&L</th>
+            <th>R:R Plan</th>
+            <th>Outcome</th>
+            <th>Reason</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="trade-tbody"></tbody>
+      </table>
+      <div class="empty-state" id="empty-state">
+        <div class="icon">📋</div>
+        <p>No trades logged yet.<br>Start tracking your entries on the left.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">▶ TRADE DETAIL</div>
+    <div id="modal-body"></div>
+    <button class="modal-close" onclick="closeModal()">CLOSE</button>
+  </div>
+</div>
+
+<script>
+  // ── DATA ──────────────────────────────────────────────
+  const STORAGE_KEY = 'tradebook_v1';
+  let trades = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  let selectedOutcome = '';
+  let currentFilter = 'ALL';
+
+  // ── INIT ──────────────────────────────────────────────
+  window.onload = () => {
+    const today = new Date();
+    document.getElementById('f-date').value = today.toISOString().split('T')[0];
+    document.getElementById('f-time').value =
+      today.toTimeString().slice(0,5);
+    render();
+  };
+
+  // ── SAVE / LOAD ───────────────────────────────────────
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+  }
+
+  // ── LOG TRADE ─────────────────────────────────────────
+  function logTrade() {
+    const ticker   = document.getElementById('f-ticker').value.trim().toUpperCase();
+    const dir      = document.getElementById('f-dir').value;
+    const date     = document.getElementById('f-date').value;
+    const time     = document.getElementById('f-time').value;
+    const entry    = parseFloat(document.getElementById('f-entry').value);
+    const exit     = parseFloat(document.getElementById('f-exit').value) || null;
+    const size     = parseFloat(document.getElementById('f-size').value) || null;
+    const rr       = document.getElementById('f-rr').value.trim();
+    const isDt     = document.getElementById('f-daytrade').value === 'yes';
+    const reason   = document.getElementById('f-reason').value.trim();
+    const outcome  = selectedOutcome;
+    const notes    = document.getElementById('f-notes').value.trim();
+
+    if (!ticker || !date || !entry) {
+      alert('Please fill in Ticker, Date, and Entry Price at minimum.');
+      return;
+    }
+
+    // PDT pre-check
+    if (isDt) {
+      const rolling = getRollingDayTrades(date);
+      if (rolling >= 4) {
+        if (!confirm(`⚠️ WARNING: This would be your ${rolling + 1}th day trade in the rolling 5-day window.\n\nLogging this trade may flag your account as a Pattern Day Trader (PDT).\n\nContinue anyway?`)) return;
+      }
+    }
+
+    const pnl = (exit && size)
+      ? (dir === 'LONG' ? (exit - entry) * size : (entry - exit) * size)
+      : null;
+
+    const trade = {
+      id: Date.now(),
+      ticker, dir, date, time, entry, exit, size, rr,
+      isDayTrade: isDt,
+      reason, outcome, notes, pnl
+    };
+
+    trades.unshift(trade);
+    save();
+    resetForm();
+    render();
+  }
+
+  // ── PDT LOGIC ─────────────────────────────────────────
+  function getTradingDaysBack(fromDateStr, n) {
+    // Returns array of n date strings going back from fromDateStr (inclusive)
+    const dates = [];
+    const d = new Date(fromDateStr + 'T12:00:00');
+    while (dates.length < n) {
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) {
+        dates.push(d.toISOString().split('T')[0]);
+      }
+      d.setDate(d.getDate() - 1);
+    }
+    return dates;
+  }
+
+  function getRollingDayTrades(asOfDate) {
+    const window5 = getTradingDaysBack(asOfDate, 5);
+    return trades.filter(t =>
+      t.isDayTrade && window5.includes(t.date)
+    ).length;
+  }
+
+  function getPDTStatus() {
+    const today = new Date().toISOString().split('T')[0];
+    const window5 = getTradingDaysBack(today, 5);
+    const dtTrades = trades.filter(t => t.isDayTrade && window5.includes(t.date));
+    const count = dtTrades.length;
+    return { count, window5, dtTrades };
+  }
+
+  // ── RENDER ────────────────────────────────────────────
+  function render() {
+    renderStats();
+    renderPDT();
+    renderTable();
+  }
+
+  function renderStats() {
+    const closed = trades.filter(t => t.outcome);
+    const wins   = closed.filter(t => t.outcome === 'WIN').length;
+    const wr     = closed.length ? Math.round(wins / closed.length * 100) + '%' : '—';
+    const totalPnl = trades.reduce((s, t) => s + (t.pnl || 0), 0);
+    const rrTrades = trades.filter(t => t.rr && t.rr.includes(':'));
+    let avgRr = '—';
+    if (rrTrades.length) {
+      const ratios = rrTrades.map(t => {
+        const p = t.rr.split(':');
+        return p.length === 2 ? parseFloat(p[1]) / parseFloat(p[0]) : null;
+      }).filter(Boolean);
+      if (ratios.length) avgRr = (ratios.reduce((a,b)=>a+b,0)/ratios.length).toFixed(2);
+    }
+
+    document.getElementById('stat-total').textContent = trades.length;
+
+    const wrEl = document.getElementById('stat-wr');
+    wrEl.textContent = wr;
+    wrEl.className = 'stat-val ' + (closed.length === 0 ? 'neutral' : wins/closed.length >= 0.5 ? 'pos' : 'neg');
+
+    const pnlEl = document.getElementById('stat-pnl');
+    pnlEl.textContent = (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toFixed(0);
+    pnlEl.className = 'stat-val ' + (totalPnl > 0 ? 'pos' : totalPnl < 0 ? 'neg' : 'neutral');
+
+    document.getElementById('stat-rr').textContent = avgRr === '—' ? '—' : '1:' + avgRr;
+    document.getElementById('stat-rr').className = 'stat-val neutral';
+  }
+
+  function renderPDT() {
+    const { count, window5, dtTrades } = getPDTStatus();
+
+    // Badge
+    const badge = document.getElementById('pdt-badge');
+    const badgeText = document.getElementById('pdt-badge-text');
+    if (count === 0) {
+      badge.className = 'safe';
+      badgeText.textContent = `PDT SAFE — 0/3 DAY TRADES`;
+    } else if (count <= 2) {
+      badge.className = 'safe';
+      badgeText.textContent = `PDT SAFE — ${count}/3 DAY TRADES`;
+    } else if (count === 3) {
+      badge.className = 'warn';
+      badgeText.textContent = `⚠ PDT WARNING — 3/3 DAY TRADES`;
+    } else {
+      badge.className = 'danger';
+      badgeText.textContent = `🚨 PDT DANGER — ${count}/3 EXCEEDED`;
+    }
+
+    // Count text + bar
+    document.getElementById('pdt-count-text').textContent =
+      `${count} day trade${count !== 1 ? 's' : ''} in window`;
+
+    const pct = Math.min((count / 3) * 100, 100);
+    const bar = document.getElementById('pdt-bar');
+    bar.style.width = pct + '%';
+    bar.style.background = count >= 4 ? 'var(--red)' : count === 3 ? 'var(--accent)' : 'var(--green)';
+
+    const msg = document.getElementById('pdt-msg');
+    if (count === 0)      msg.textContent = "You're clear. No day trades this window.";
+    else if (count === 1) msg.textContent = "1 day trade used. 2 remaining.";
+    else if (count === 2) msg.textContent = "2 day trades used. 1 remaining — be careful.";
+    else if (count === 3) msg.textContent = "⚠ Limit reached. Next day trade = PDT flag.";
+    else                  msg.textContent = `🚨 ${count} day trades — PDT flag likely triggered!`;
+    msg.style.color = count >= 4 ? 'var(--red)' : count === 3 ? 'var(--accent)' : 'var(--muted)';
+
+    // Day pips
+    const row = document.getElementById('pdt-days-row');
+    row.innerHTML = '';
+    const today = new Date().toISOString().split('T')[0];
+    const dtDates = new Set(dtTrades.map(t => t.date));
+    window5.reverse().forEach((d, i) => {
+      const pip = document.createElement('div');
+      pip.className = 'day-pip' + (dtDates.has(d) ? ' has-trade' : '') + (d === today ? ' today' : '');
+      pip.title = d;
+      const label = new Date(d + 'T12:00:00').toLocaleDateString('en-US', {weekday:'short'});
+      pip.textContent = label.slice(0,1);
+      if (dtDates.has(d)) {
+        const n = dtTrades.filter(t => t.date === d).length;
+        pip.textContent += n > 1 ? n : '';
+      }
+      row.appendChild(pip);
+    });
+    window5.reverse(); // restore
+
+    // Alert banner
+    const alert = document.getElementById('pdt-alert');
+    if (count === 3) {
+      alert.style.display = 'block';
+      alert.className = 'warn';
+      alert.innerHTML = `<strong>⚠ PDT Warning:</strong> You've used all 3 allowed day trades in the rolling 5-day window. Any additional day trade this window will trigger Pattern Day Trader status. Consider waiting until older trades fall outside the window.`;
+    } else if (count >= 4) {
+      alert.style.display = 'block';
+      alert.className = 'danger';
+      alert.innerHTML = `<strong>🚨 PDT Threshold Exceeded:</strong> You have ${count} day trades in the last 5 trading days — above the 3-trade safe limit. Your account may be flagged as a Pattern Day Trader. If your balance drops below $25,000, day trading will be restricted.`;
+    } else {
+      alert.style.display = 'none';
+    }
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('trade-tbody');
+    const empty = document.getElementById('empty-state');
+
+    let filtered = [...trades];
+    if (currentFilter === 'DAY')  filtered = filtered.filter(t => t.isDayTrade);
+    if (currentFilter === 'WIN')  filtered = filtered.filter(t => t.outcome === 'WIN');
+    if (currentFilter === 'LOSS') filtered = filtered.filter(t => t.outcome === 'LOSS');
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    tbody.innerHTML = filtered.map(t => {
+      const pnlHtml = t.pnl !== null
+        ? `<td class="pnl-cell ${t.pnl >= 0 ? 'pos' : 'neg'}">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}</td>`
+        : `<td class="mono" style="color:var(--muted);">—</td>`;
+
+      const outcome = t.outcome || 'OPEN';
+      const reasonShort = t.reason ? (t.reason.length > 28 ? t.reason.slice(0,28) + '…' : t.reason) : '—';
+
+      return `<tr onclick="showDetail(${t.id})">
+        <td class="mono" style="white-space:nowrap;">${t.date}<br><span style="color:var(--muted);font-size:11px;">${t.time || ''}</span></td>
+        <td><span class="ticker-tag">${t.ticker}</span>${t.isDayTrade ? '<span class="daytrade-flag">DT</span>' : ''}</td>
+        <td class="mono" style="color:${t.dir==='LONG'?'var(--green)':'var(--red)'}">${t.dir}</td>
+        <td class="mono">$${t.entry.toFixed(2)}</td>
+        <td class="mono">${t.exit ? '$'+t.exit.toFixed(2) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="mono">${t.size || '—'}</td>
+        ${pnlHtml}
+        <td class="mono" style="color:var(--muted)">${t.rr || '—'}</td>
+        <td><span class="outcome-tag ${outcome}">${outcome}</span></td>
+        <td style="color:var(--muted);max-width:160px;">${reasonShort}</td>
+        <td><button class="action-btn" onclick="event.stopPropagation();deleteTrade(${t.id})">✕</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── DETAIL MODAL ──────────────────────────────────────
+  function showDetail(id) {
+    const t = trades.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('modal-title').textContent =
+      `▶ ${t.ticker} — ${t.date} ${t.time || ''}`;
+
+    const rows = [
+      ['Direction', t.dir],
+      ['Day Trade', t.isDayTrade ? 'Yes ⚡' : 'No'],
+      ['Entry Price', `$${t.entry.toFixed(2)}`],
+      ['Exit Price', t.exit ? `$${t.exit.toFixed(2)}` : 'Open'],
+      ['Size', t.size ? `${t.size} shares` : '—'],
+      ['P&L', t.pnl !== null ? `${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}` : '—'],
+      ['Planned R:R', t.rr || '—'],
+      ['Outcome', t.outcome || 'Open'],
+      ['Entry Reason', t.reason || '—'],
+      ['Post-Trade Notes', t.notes || '—'],
+    ];
+
+    document.getElementById('modal-body').innerHTML = rows.map(([k, v]) =>
+      `<div class="modal-detail-row">
+        <span class="modal-detail-key">${k}</span>
+        <span class="modal-detail-val">${v}</span>
+      </div>`
+    ).join('');
+
+    document.getElementById('detail-modal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('detail-modal').classList.remove('open');
+  }
+
+  document.getElementById('detail-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // ── HELPERS ───────────────────────────────────────────
+  function selectOutcome(el) {
+    document.querySelectorAll('.outcome-btn').forEach(b => b.className = 'outcome-btn');
+    selectedOutcome = el.dataset.val;
+    el.classList.add('active-' + selectedOutcome.toLowerCase().replace('be','be'));
+    document.getElementById('f-outcome').value = selectedOutcome;
+  }
+
+  function setFilter(val, el) {
+    currentFilter = val;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    renderTable();
+  }
+
+  function deleteTrade(id) {
+    trades = trades.filter(t => t.id !== id);
+    save();
+    render();
+  }
+
+  function confirmClearAll() {
+    if (trades.length === 0) return alert('Nothing to clear.');
+    if (confirm('Delete ALL trades? This cannot be undone.')) {
+      trades = [];
+      save();
+      render();
+    }
+  }
+
+  function resetForm() {
+    document.getElementById('f-ticker').value = '';
+    document.getElementById('f-exit').value = '';
+    document.getElementById('f-size').value = '';
+    document.getElementById('f-rr').value = '';
+    document.getElementById('f-reason').value = '';
+    document.getElementById('f-notes').value = '';
+    document.getElementById('f-outcome').value = '';
+    selectedOutcome = '';
+    document.querySelectorAll('.outcome-btn').forEach(b => b.className = 'outcome-btn');
+  }
+</script>
+</body>
+</html>
