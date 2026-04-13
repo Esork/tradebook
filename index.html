@@ -497,6 +497,103 @@
   }
   .clear-btn:hover { background: #f2415a18; }
 
+  /* ── LIGHTBOX ── */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.88);
+    backdrop-filter: blur(8px);
+    z-index: 400;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img {
+    max-width: 90vw;
+    max-height: 88vh;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    cursor: default;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.9);
+  }
+  #lightbox-close {
+    position: fixed;
+    top: 18px;
+    right: 22px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    z-index: 401;
+    line-height: 1;
+  }
+  #lightbox-close:hover { background: var(--red); border-color: var(--red); color: #fff; }
+
+  /* ── EDIT MODAL ── */
+  .edit-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .edit-actions .submit-btn { margin-top: 0; }
+  .edit-actions .modal-close { margin-top: 0; flex: 0 0 auto; width: auto; padding: 11px 20px; }
+
+  /* ── SCREENSHOT ── */
+  .screenshot-upload {
+    position: relative;
+  }
+  .screenshot-upload input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+  }
+  .screenshot-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px dashed var(--border2);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--mono);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .screenshot-upload:hover .screenshot-label,
+  .screenshot-upload.has-file .screenshot-label {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .ss-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border-radius: 3px;
+    border: 1px solid var(--border2);
+    cursor: pointer;
+    display: block;
+  }
+  .ss-thumb:hover { border-color: var(--accent); }
+
   /* scrollbar */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -616,6 +713,13 @@
             <textarea id="f-reason" placeholder="Why did you enter? Setup, signal, confluence..."></textarea>
           </div>
           <div class="form-group full">
+            <label>Screenshot</label>
+            <div class="screenshot-upload" id="ss-upload-wrap">
+              <div class="screenshot-label" id="ss-label">📷 &nbsp;Click to attach chart screenshot</div>
+              <input type="file" id="f-screenshot" accept="image/*" onchange="onScreenshotChange(this)">
+            </div>
+          </div>
+          <div class="form-group full">
             <label>Outcome</label>
             <div class="outcome-row">
               <div class="outcome-btn" data-val="WIN" onclick="selectOutcome(this)">WIN</div>
@@ -648,6 +752,9 @@
           <button class="filter-btn" onclick="setFilter('LOSS', this)">LOSS</button>
         </div>
         <button class="clear-btn" onclick="confirmClearAll()">CLEAR ALL</button>
+        <button class="clear-btn" onclick="exportTrades()">EXPORT JSON</button>
+        <input type="file" id="import-file" accept=".json" style="display:none;">
+        <button class="clear-btn" onclick="document.getElementById('import-file').click()">IMPORT JSON</button>
       </div>
     </div>
 
@@ -662,13 +769,14 @@
             <th>Date / Time</th>
             <th>Ticker</th>
             <th>Dir</th>
+            <th>SS</th>
+            <th>Reason</th>
             <th>Entry</th>
             <th>Exit</th>
             <th>Size</th>
             <th>P&L</th>
             <th>R:R Plan</th>
             <th>Outcome</th>
-            <th>Reason</th>
             <th></th>
           </tr>
         </thead>
@@ -691,6 +799,92 @@
   </div>
 </div>
 
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="event.stopPropagation();closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="chart" onclick="event.stopPropagation()">
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal" style="width:580px;">
+    <div class="modal-title">✎ EDIT TRADE</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Ticker</label>
+        <input type="text" id="e-ticker" style="text-transform:uppercase;">
+      </div>
+      <div class="form-group">
+        <label>Direction</label>
+        <select id="e-dir">
+          <option value="LONG">LONG</option>
+          <option value="SHORT">SHORT</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Entry Date</label>
+        <input type="date" id="e-date">
+      </div>
+      <div class="form-group">
+        <label>Entry Time</label>
+        <input type="time" id="e-time">
+      </div>
+      <div class="form-group">
+        <label>Entry Price ($)</label>
+        <input type="number" id="e-entry" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Exit Price ($)</label>
+        <input type="number" id="e-exit" step="0.01" placeholder="0.00 (opt)">
+      </div>
+      <div class="form-group">
+        <label>Size (shares)</label>
+        <input type="number" id="e-size">
+      </div>
+      <div class="form-group">
+        <label>Planned R:R</label>
+        <input type="text" id="e-rr" placeholder="e.g. 1:2.5">
+      </div>
+      <div class="form-group full">
+        <label>Day Trade?</label>
+        <select id="e-daytrade">
+          <option value="yes">Yes — same day open &amp; close</option>
+          <option value="no">No — swing / overnight</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Entry Reason</label>
+        <textarea id="e-reason" placeholder="Why did you enter?"></textarea>
+      </div>
+      <div class="form-group full">
+        <label>Screenshot</label>
+        <div id="e-ss-preview"></div>
+        <div class="screenshot-upload" id="e-ss-upload-wrap" style="margin-top:6px;">
+          <div class="screenshot-label" id="e-ss-label">📷 &nbsp;Replace screenshot</div>
+          <input type="file" id="e-screenshot" accept="image/*" onchange="onEditScreenshotChange(this)">
+        </div>
+      </div>
+      <div class="form-group full">
+        <label>Outcome</label>
+        <div class="outcome-row" id="e-outcome-row">
+          <div class="outcome-btn" data-val="WIN" onclick="selectEditOutcome(this)">WIN</div>
+          <div class="outcome-btn" data-val="LOSS" onclick="selectEditOutcome(this)">LOSS</div>
+          <div class="outcome-btn" data-val="BE" onclick="selectEditOutcome(this)">B/E</div>
+        </div>
+        <input type="hidden" id="e-outcome" value="">
+      </div>
+      <div class="form-group full">
+        <label>Post-Trade Notes</label>
+        <textarea id="e-notes" placeholder="What happened? Mistakes, lessons, emotions..."></textarea>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="submit-btn" onclick="saveEdit()">SAVE CHANGES</button>
+      <button class="modal-close" onclick="closeEditModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // ── DATA ──────────────────────────────────────────────
   const STORAGE_KEY = 'tradebook_v1';
@@ -705,6 +899,33 @@
     document.getElementById('f-time').value =
       today.toTimeString().slice(0,5);
     render();
+
+    // Import file handler
+    document.getElementById('import-file').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            if (confirm('Replace current trades with imported data? Cancel to merge.')) {
+              trades = imported;
+            } else {
+              trades = [...trades, ...imported];
+            }
+            save();
+            render();
+            alert('Trades imported successfully.');
+          } else {
+            alert('Invalid JSON format. Expected an array of trades.');
+          }
+        } catch (err) {
+          alert('Error parsing JSON file.');
+        }
+      };
+      reader.readAsText(file);
+    });
   };
 
   // ── SAVE / LOAD ───────────────────────────────────────
@@ -726,6 +947,7 @@
     const reason   = document.getElementById('f-reason').value.trim();
     const outcome  = selectedOutcome;
     const notes    = document.getElementById('f-notes').value.trim();
+    const ssFile   = document.getElementById('f-screenshot').files[0] || null;
 
     if (!ticker || !date || !entry) {
       alert('Please fill in Ticker, Date, and Entry Price at minimum.');
@@ -744,17 +966,29 @@
       ? (dir === 'LONG' ? (exit - entry) * size : (entry - exit) * size)
       : null;
 
-    const trade = {
-      id: Date.now(),
-      ticker, dir, date, time, entry, exit, size, rr,
-      isDayTrade: isDt,
-      reason, outcome, notes, pnl
-    };
+    const tradeId = Date.now();
 
-    trades.unshift(trade);
-    save();
-    resetForm();
-    render();
+    function commitTrade(screenshotDataUrl) {
+      const trade = {
+        id: tradeId,
+        ticker, dir, date, time, entry, exit, size, rr,
+        isDayTrade: isDt,
+        reason, outcome, notes, pnl,
+        screenshot: screenshotDataUrl || null
+      };
+      trades.unshift(trade);
+      save();
+      resetForm();
+      render();
+    }
+
+    if (ssFile) {
+      const reader = new FileReader();
+      reader.onload = e => commitTrade(e.target.result);
+      reader.readAsDataURL(ssFile);
+    } else {
+      commitTrade(null);
+    }
   }
 
   // ── PDT LOGIC ─────────────────────────────────────────
@@ -917,19 +1151,26 @@
 
       const outcome = t.outcome || 'OPEN';
       const reasonShort = t.reason ? (t.reason.length > 28 ? t.reason.slice(0,28) + '…' : t.reason) : '—';
+      const ssHtml = t.screenshot
+        ? `<td><img class="ss-thumb" src="${t.screenshot}" alt="chart" onclick="event.stopPropagation();openLightbox(${t.id})"></td>`
+        : `<td class="mono" style="color:var(--muted);">—</td>`;
 
       return `<tr onclick="showDetail(${t.id})">
         <td class="mono" style="white-space:nowrap;">${t.date}<br><span style="color:var(--muted);font-size:11px;">${t.time || ''}</span></td>
         <td><span class="ticker-tag">${t.ticker}</span>${t.isDayTrade ? '<span class="daytrade-flag">DT</span>' : ''}</td>
         <td class="mono" style="color:${t.dir==='LONG'?'var(--green)':'var(--red)'}">${t.dir}</td>
+        ${ssHtml}
+        <td style="color:var(--muted);max-width:160px;">${reasonShort}</td>
         <td class="mono">$${t.entry.toFixed(2)}</td>
         <td class="mono">${t.exit ? '$'+t.exit.toFixed(2) : '<span style="color:var(--muted)">—</span>'}</td>
         <td class="mono">${t.size || '—'}</td>
         ${pnlHtml}
         <td class="mono" style="color:var(--muted)">${t.rr || '—'}</td>
         <td><span class="outcome-tag ${outcome}">${outcome}</span></td>
-        <td style="color:var(--muted);max-width:160px;">${reasonShort}</td>
-        <td><button class="action-btn" onclick="event.stopPropagation();deleteTrade(${t.id})">✕</button></td>
+        <td style="white-space:nowrap;">
+          <button class="action-btn" onclick="event.stopPropagation();openEditModal(${t.id})" style="margin-right:4px;" title="Edit">✎</button>
+          <button class="action-btn" onclick="event.stopPropagation();deleteTrade(${t.id})" title="Delete">✕</button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -954,7 +1195,15 @@
       ['Post-Trade Notes', t.notes || '—'],
     ];
 
-    document.getElementById('modal-body').innerHTML = rows.map(([k, v]) =>
+    const ssHtml = t.screenshot
+      ? `<div style="margin-bottom:16px;">
+           <div class="modal-detail-key" style="margin-bottom:8px;">SCREENSHOT</div>
+           <img src="${t.screenshot}" style="width:100%;border-radius:6px;border:1px solid var(--border2);cursor:pointer;"
+                onclick="openLightbox(${t.id})">
+         </div>`
+      : '';
+
+    document.getElementById('modal-body').innerHTML = ssHtml + rows.map(([k, v]) =>
       `<div class="modal-detail-row">
         <span class="modal-detail-key">${k}</span>
         <span class="modal-detail-val">${v}</span>
@@ -1010,8 +1259,162 @@
     document.getElementById('f-reason').value = '';
     document.getElementById('f-notes').value = '';
     document.getElementById('f-outcome').value = '';
+    document.getElementById('f-screenshot').value = '';
+    document.getElementById('ss-label').textContent = '📷 \u00a0Click to attach chart screenshot';
+    document.getElementById('ss-upload-wrap').classList.remove('has-file');
     selectedOutcome = '';
     document.querySelectorAll('.outcome-btn').forEach(b => b.className = 'outcome-btn');
+  }
+
+  function onScreenshotChange(input) {
+    const wrap = document.getElementById('ss-upload-wrap');
+    const label = document.getElementById('ss-label');
+    if (input.files && input.files[0]) {
+      wrap.classList.add('has-file');
+      label.textContent = '✓ \u00a0' + input.files[0].name;
+    } else {
+      wrap.classList.remove('has-file');
+      label.textContent = '📷 \u00a0Click to attach chart screenshot';
+    }
+  }
+
+  // ── LIGHTBOX ──────────────────────────────────────────
+  function openLightbox(id) {
+    const t = trades.find(x => x.id === id);
+    if (!t || !t.screenshot) return;
+    document.getElementById('lightbox-img').src = t.screenshot;
+    document.getElementById('lightbox').classList.add('open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.getElementById('lightbox-img').src = '';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeLightbox(); closeEditModal(); closeModal(); }
+  });
+
+  // ── EDIT MODAL ────────────────────────────────────────
+  let editTradeId = null;
+  let editSelectedOutcome = '';
+
+  function openEditModal(id) {
+    const t = trades.find(x => x.id === id);
+    if (!t) return;
+    editTradeId = id;
+    editSelectedOutcome = t.outcome || '';
+
+    document.getElementById('e-ticker').value  = t.ticker;
+    document.getElementById('e-dir').value     = t.dir;
+    document.getElementById('e-date').value    = t.date;
+    document.getElementById('e-time').value    = t.time || '';
+    document.getElementById('e-entry').value   = t.entry;
+    document.getElementById('e-exit').value    = t.exit || '';
+    document.getElementById('e-size').value    = t.size || '';
+    document.getElementById('e-rr').value      = t.rr || '';
+    document.getElementById('e-daytrade').value = t.isDayTrade ? 'yes' : 'no';
+    document.getElementById('e-reason').value  = t.reason || '';
+    document.getElementById('e-notes').value   = t.notes || '';
+    document.getElementById('e-outcome').value = t.outcome || '';
+    document.getElementById('e-screenshot').value = '';
+    document.getElementById('e-ss-upload-wrap').classList.remove('has-file');
+    document.getElementById('e-ss-label').textContent = '📷 \u00a0Replace screenshot';
+
+    const preview = document.getElementById('e-ss-preview');
+    preview.innerHTML = t.screenshot
+      ? `<img src="${t.screenshot}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid var(--border2);display:block;margin-bottom:4px;cursor:pointer;" onclick="openLightbox(${t.id})">`
+      : '';
+
+    document.querySelectorAll('#e-outcome-row .outcome-btn').forEach(b => {
+      b.className = 'outcome-btn';
+      if (b.dataset.val === t.outcome) b.classList.add('active-' + t.outcome.toLowerCase());
+    });
+
+    document.getElementById('edit-modal').classList.add('open');
+  }
+
+  function closeEditModal() {
+    document.getElementById('edit-modal').classList.remove('open');
+    editTradeId = null;
+  }
+
+  document.getElementById('edit-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeEditModal();
+  });
+
+  function selectEditOutcome(el) {
+    document.querySelectorAll('#e-outcome-row .outcome-btn').forEach(b => b.className = 'outcome-btn');
+    editSelectedOutcome = el.dataset.val;
+    el.classList.add('active-' + editSelectedOutcome.toLowerCase());
+    document.getElementById('e-outcome').value = editSelectedOutcome;
+  }
+
+  function onEditScreenshotChange(input) {
+    const wrap  = document.getElementById('e-ss-upload-wrap');
+    const label = document.getElementById('e-ss-label');
+    if (input.files && input.files[0]) {
+      wrap.classList.add('has-file');
+      label.textContent = '✓ \u00a0' + input.files[0].name;
+    } else {
+      wrap.classList.remove('has-file');
+      label.textContent = '📷 \u00a0Replace screenshot';
+    }
+  }
+
+  function saveEdit() {
+    const idx = trades.findIndex(x => x.id === editTradeId);
+    if (idx === -1) return;
+
+    const ticker = document.getElementById('e-ticker').value.trim().toUpperCase();
+    const entry  = parseFloat(document.getElementById('e-entry').value);
+    if (!ticker || !entry) { alert('Ticker and Entry Price are required.'); return; }
+
+    const dir    = document.getElementById('e-dir').value;
+    const date   = document.getElementById('e-date').value;
+    const time   = document.getElementById('e-time').value;
+    const exit   = parseFloat(document.getElementById('e-exit').value) || null;
+    const size   = parseFloat(document.getElementById('e-size').value) || null;
+    const rr     = document.getElementById('e-rr').value.trim();
+    const isDt   = document.getElementById('e-daytrade').value === 'yes';
+    const reason = document.getElementById('e-reason').value.trim();
+    const notes  = document.getElementById('e-notes').value.trim();
+    const pnl    = (exit && size)
+      ? (dir === 'LONG' ? (exit - entry) * size : (entry - exit) * size)
+      : null;
+
+    const ssFile = document.getElementById('e-screenshot').files[0] || null;
+
+    function commitEdit(newScreenshot) {
+      trades[idx] = {
+        ...trades[idx],
+        ticker, dir, date, time, entry, exit, size, rr,
+        isDayTrade: isDt, reason, outcome: editSelectedOutcome, notes, pnl,
+        screenshot: newScreenshot !== undefined ? newScreenshot : trades[idx].screenshot
+      };
+      save();
+      render();
+      closeEditModal();
+    }
+
+    if (ssFile) {
+      const reader = new FileReader();
+      reader.onload = e => commitEdit(e.target.result);
+      reader.readAsDataURL(ssFile);
+    } else {
+      commitEdit(undefined);
+    }
+  }
+
+  // ── EXPORT / IMPORT ────────────────────────────────────
+  function exportTrades() {
+    const dataStr = JSON.stringify(trades, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = 'tradebook_backup.json';
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
   }
 </script>
 </body>
